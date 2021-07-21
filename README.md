@@ -21,4 +21,5 @@ Run dockerp with flag -ds ip_of_your_linux_machine
 Now any docker image you run with docker will be hosted on your remote docker engine instance, but will be available to access on localhost
 
 >docker run -p 80:80 -d nginxdemos/hello
+
 Is now accessible on your localhost M1
