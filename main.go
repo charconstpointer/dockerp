@@ -32,8 +32,6 @@ func main() {
 	}
 
 	for _, c := range containers {
-		log.Println(c.Status)
-		log.Println(c.Ports[0].PublicPort)
 		go forward(fmt.Sprintf("%d", c.Ports[0].PublicPort), *ds)
 	}
 	<-ctx.Done()
