@@ -1,57 +1,55 @@
 package main
 
 import (
-	"context"
-	"flag"
-	"fmt"
-	"io"
 	"log"
 	"net"
-
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
-)
-
-var (
-	ds = flag.String("ds", "", "ds server ip")
 )
 
 func main() {
-	flag.Parse()
-	if *ds == "" {
-		log.Fatal("ds server ip is empty")
-	}
-	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	l, err := net.Listen("tcp", ":8080")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error listening: %s", err)
 	}
-	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{})
-	if err != nil {
-		log.Fatal(err)
+	log.Printf("Listening on %s", l.Addr())
+	defer l.Close()
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatalf("Error accepting: %s", err)
+		}
+		log.Printf("Accepted connection from %s", conn.RemoteAddr())
+		us, err := net.Dial("tcp", "127.0.0.1:4444")
+		if err != nil {
+			log.Fatalf("Error dialing: %s", err)
+		}
+		// go io.Copy(conn, us)
+		// io.Copy(us, conn)
+		go func(conn net.Conn, us net.Conn) {
+			var b [1024]byte
+			n, err := conn.Read(b[:])
+			if err != nil {
+				log.Fatalf("Error reading: %s", err)
+			}
+			log.Printf("Read %d bytes", n)
+			n, err = us.Write(b[:n])
+			if err != nil {
+				log.Fatalf("Error writing: %s", err)
+			}
+			log.Printf("Wrote %d bytes", n)
+		}(conn, us)
+		go func(conn net.Conn, us net.Conn) {
+			var b [1024]byte
+			n, err := us.Read(b[:])
+			if err != nil {
+				log.Fatalf("Error reading: %s", err)
+			}
+			log.Printf("Read %d bytes", n)
+			n, err = conn.Write(b[:n])
+			if err != nil {
+				log.Fatalf("Error writing: %s", err)
+			}
+			log.Printf("Wrote %d bytes", n)
+		}(conn, us)
 	}
 
-	for _, c := range containers {
-		go forward(fmt.Sprintf("%d", c.Ports[0].PublicPort), *ds)
-	}
-	<-ctx.Done()
-}
-
-func forward(port, dsAddr string) error {
-	log.Println("forward: ", fmt.Sprintf("%s:%s", dsAddr, port))
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", "0.0.0.0", port))
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	conn, err := l.Accept()
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	ds, err := net.Dial("tcp", fmt.Sprintf("%s:%s", dsAddr, port))
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	go io.Copy(conn, ds)
-	_, err = io.Copy(ds, conn)
-	return err
 }
